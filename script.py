@@ -43,101 +43,94 @@ def extract_table_data(pdf_path):
     return all_text, all_nbre_uvc_values
 
 def extract_ref_cdes_and_gencodes(all_text):
-    # Regex patterns for reference codes and Gencods
-    ref_cde_pattern = r"Ref Cde: (\w+)"
+    # Regex patterns for date, reference codes and Gencods
+    ref_cde_pattern = r"(\d{2}/\d{2}/\d{4})\s+Ref Cde: (\w+)"
     gencode_pattern = r"Gencod : (\d+)"
-
-    # Find all Ref Cde occurrences
-    ref_cdes = re.findall(ref_cde_pattern, all_text)
 
     # Store results in a dictionary
     results = defaultdict(list)
 
-    # Initialize the current position in the text
-    current_position = 0
+    # Find all occurrences of Ref Cde along with the date
+    matches = re.findall(ref_cde_pattern, all_text)
 
-    # Loop through each Ref Cde
-    for i in range(len(ref_cdes)):
-        ref_cde = ref_cdes[i]
-        # Find the position of the current Ref Cde
-        ref_position = all_text.index(ref_cde, current_position)
+    # Loop through each match and extract details
+    for date, ref_cde in matches:
+        # Extract Gencods after the reference code in the text
+        ref_position = all_text.index(ref_cde)
+        next_ref_position = len(all_text)  # Default to the end of text
 
-        # Extract Gencods until the next Ref Cde or end of text
-        next_ref_position = len(all_text)
-        if i + 1 < len(ref_cdes):
-            next_ref_cde = ref_cdes[i + 1]
-            next_ref_position = all_text.index(next_ref_cde, ref_position) if next_ref_cde in all_text else len(all_text)
+        # Determine where the next Ref Cde occurs
+        for match in matches:
+            if match[1] != ref_cde:
+                next_ref_position = all_text.index(match[1])
+                break
 
-        # Extract Gencods in the range
+        # Extract Gencods in the section
         gencodes_section = all_text[ref_position:next_ref_position]
         gencodes = re.findall(gencode_pattern, gencodes_section)
 
-        # Append unique Gencods to the results
+        # Append unique Gencods to the results along with the date
         for gencode in gencodes:
-            if gencode not in results[ref_cde]:
-                results[ref_cde].append(gencode)
-
-        # Update current position
-        current_position = ref_position + len(ref_cde)
+            results[ref_cde].append((date, gencode))
 
     return results
 
 def prepare_final_results(results, all_nbre_uvc_values):
     # Prepare final output with Nbre d’UVC
     final_results = []
-    for ref_cde in results.keys():
-        gencods = results[ref_cde]
-
-        # Get the corresponding Nbre d’UVC values
-        ref_index = list(results.keys()).index(ref_cde)  # Find the index of the reference code
-        nbre_uvc_index = ref_index * 2  # Each Ref Cde corresponds to 2 UVC values in your logic
-
-        for j, gencode in enumerate(gencods):
+    for ref_cde, gencodes_with_dates in results.items():
+        for index, (date, gencode) in enumerate(gencodes_with_dates):
             # Replace gencode if it's in the replacement dictionary
             if gencode in gencode_replacement:
                 gencode = gencode_replacement[gencode]
 
-            if nbre_uvc_index + j < len(all_nbre_uvc_values):  # Ensure we don't go out of bounds
-                nbre_uvc = all_nbre_uvc_values[nbre_uvc_index + j].strip()  # Strip leading/trailing spaces
+            # Ensure we have enough UVC values
+            if index < len(all_nbre_uvc_values):
+                nbre_uvc = all_nbre_uvc_values[index].strip()
                 final_results.append({
                     "Ref Cde": ref_cde,
+                    "Date": date,  # Include date in the final results
                     "Gencode": gencode,
                     "Nbre d’UVC": nbre_uvc
                 })
 
     return final_results
 
+def format_date(date):
+    """Convert date from DD/MM/YYYY to YYYYMMDD format."""
+    day, month, year = date.split("/")
+    return f"{year}{month}{day}"
+
 def save_to_csv(final_results, pdf_filename, main_folder):
-    # Create a folder named after the PDF file (without the extension) inside the main folder
     folder_name = os.path.splitext(pdf_filename)[0]
     csv_folder_path = os.path.join(main_folder, folder_name)
     os.makedirs(csv_folder_path, exist_ok=True)
 
     current_ref_code = None
     output_lines = []
-    file_count = 1  # To count the number of CSV files created
+    file_count = 1
 
     for result in final_results:
         ref_code = result["Ref Cde"]
+        date = format_date(result["Date"])  # Format the date
+        gencode = result["Gencode"]
+        nbre_uvc = result["Nbre d’UVC"]
 
         if len(ref_code) == 3:
             ref_code += '01'
 
-        gencode = result["Gencode"]
-        nbre_uvc = result["Nbre d’UVC"]
-
         # Check if the reference code has changed
         if current_ref_code != ref_code:
-            if output_lines:  # Save previous results if they exist
+            if output_lines:
                 filename = os.path.join(csv_folder_path, f"{folder_name}_{file_count}.csv")
                 with open(filename, 'w') as f:
                     for line in output_lines:
                         f.write(line + '\n')
-                output_lines = []  # Reset for new ref code
-                file_count += 1  # Increment the file count
+                output_lines = []
+                file_count += 1
 
             # Create new header line
-            header_line = f"H;HCEN3;HCEN3;;SDH;{ref_code};20240501;20240501;1;1"
+            header_line = f"H;HCEN3;HCEN3;;SDH;{ref_code};{date};{date};1;1"  # Include formatted date
             output_lines.append(header_line)
             current_ref_code = ref_code
 
