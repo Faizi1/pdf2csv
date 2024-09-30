@@ -60,7 +60,10 @@ This batch file allows you to run `script.py` with a double-click, simplifying e
      ```bash
      python script.py
      ```
+     > Windows:
    - Alternatively, use `run_script.cmd` to execute it with a double-click.
+     > Mac:
+   - Alternatively, use `run_script.sh` to execute it with a double-click.
 
 ## Output
 
@@ -69,7 +72,7 @@ This batch file allows you to run `script.py` with a double-click, simplifying e
 
     - **Header Format**:
       ```
-      H;HCEN3;HCEN3;;SDH;{ref_code};20240501;20240501;1;1
+      H;HCEN3;HCEN3;;SDH;{ref_code};{date};{date};1;1
       ```
 
     - **Data Format**:
